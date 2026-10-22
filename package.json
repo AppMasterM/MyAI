@@ -1,9 +1,12 @@
+
 {
   "name": "myai",
   "version": "1.0.0",
   "private": true,
-  "description": "MyAI React frontend",
+  "description": "MyAI React frontend and Android application",
   "dependencies": {
+    "@capacitor/android": "^7.6.8",
+    "@capacitor/core": "^7.6.8",
     "ajv": "^8.20.0",
     "ajv-keywords": "^5.1.0",
     "jszip": "^3.10.1",
@@ -12,6 +15,7 @@
     "react-scripts": "^5.0.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.6.8",
     "@types/react": "19.0.0",
     "@types/react-dom": "19.0.0",
     "loader-utils": "3.2.1",

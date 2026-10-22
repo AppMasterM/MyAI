@@ -22,7 +22,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "20"
           cache: npm
 
       - name: Set up Java
@@ -37,46 +37,58 @@ jobs:
       - name: Build React frontend
         run: npm run build
 
-      - name: Generate Android project
-        run: npx cap add android
+      - name: Generate Android project if needed
+        run: |
+          set -euo pipefail
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
 
       - name: Sync web files into Android
         run: npx cap sync android
 
-            - name: Restore and verify release keystore
+      - name: Restore and verify release keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
 
           if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "ERROR: KEYSTORE_BASE64 is empty or unavailable"
+            echo "ERROR: KEYSTORE_BASE64 is empty or unavailable."
             exit 1
           fi
 
           if [ -z "$KEYSTORE_PASSWORD" ]; then
-            echo "ERROR: KEYSTORE_PASSWORD is empty or unavailable"
+            echo "ERROR: KEYSTORE_PASSWORD is empty or unavailable."
             exit 1
           fi
 
           if [ -z "$KEY_ALIAS" ]; then
-            echo "ERROR: KEY_ALIAS is empty or unavailable"
+            echo "ERROR: KEY_ALIAS is empty or unavailable."
             exit 1
           fi
 
-          echo "Checking Base64 keystore data..."
+          if [ -z "$KEY_PASSWORD" ]; then
+            echo "ERROR: KEY_PASSWORD is empty or unavailable."
+            exit 1
+          fi
+
+          echo "Restoring keystore..."
           KEYSTORE_PATH="$RUNNER_TEMP/myai-release.jks"
 
           if ! printf '%s' "$KEYSTORE_BASE64" |
             base64 --decode > "$KEYSTORE_PATH"; then
-            echo "ERROR: Base64 decoding failed"
+            echo "ERROR: Base64 decoding failed."
             exit 1
           fi
 
+          chmod 600 "$KEYSTORE_PATH"
+
           if [ ! -s "$KEYSTORE_PATH" ]; then
-            echo "ERROR: Restored keystore is empty"
+            echo "ERROR: The restored keystore is empty."
             exit 1
           fi
 
@@ -84,13 +96,26 @@ jobs:
           if ! keytool -list \
             -keystore "$KEYSTORE_PATH" \
             -storepass "$KEYSTORE_PASSWORD" \
-            -alias "$KEY_ALIAS"; then
-            echo "ERROR: Keystore verification failed. Check the key file, password, and alias."
+            -alias "$KEY_ALIAS" >/dev/null; then
+            echo "ERROR: Keystore, store password, or alias is incorrect."
             exit 1
           fi
 
+          echo "Checking private-key password..."
+          if ! keytool -certreq \
+            -keystore "$KEYSTORE_PATH" \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -keypass "$KEY_PASSWORD" \
+            -alias "$KEY_ALIAS" \
+            -file "$RUNNER_TEMP/myai-test.csr" >/dev/null; then
+            echo "ERROR: Private-key password or key alias is incorrect."
+            exit 1
+          fi
+
+          rm -f "$RUNNER_TEMP/myai-test.csr"
+
           echo "MYAI_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
-          echo "SUCCESS: Keystore restored and verified."
+          echo "SUCCESS: Keystore and signing passwords verified."
 
       - name: Build signed release APK
         working-directory: android
@@ -100,11 +125,12 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          test -n "$KEY_PASSWORD"
+
+          test -s "$MYAI_KEYSTORE_PATH"
           chmod +x gradlew
 
-          ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/myai-release.jks" \
+          ./gradlew --no-daemon assembleRelease \
+            -Pandroid.injected.signing.store.file="$MYAI_KEYSTORE_PATH" \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
             -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
@@ -112,13 +138,24 @@ jobs:
       - name: Verify APK signature
         run: |
           set -euo pipefail
+
           APK="android/app/build/outputs/apk/release/app-release.apk"
-          test -s "$APK"
+
+          if [ ! -s "$APK" ]; then
+            echo "ERROR: Release APK was not generated."
+            exit 1
+          fi
 
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" \
             -type f -name apksigner | sort -V | tail -n 1)"
-          test -n "$APKSIGNER"
+
+          if [ -z "$APKSIGNER" ]; then
+            echo "ERROR: Android apksigner was not found."
+            exit 1
+          fi
+
           "$APKSIGNER" verify --verbose "$APK"
+          echo "SUCCESS: APK signature verified."
 
       - name: Upload signed MyAI release APK
         uses: actions/upload-artifact@v4

@@ -1,12 +1,43 @@
+
+# Dependencies
 node_modules/
+
+# React build output
 build/
+coverage/
+
+# Environment files and secrets
 .env
 .env.*
 !.env.example
+*.local
+*.log
 npm-debug.log*
-.DS_Store
+yarn-debug.log*
+pnpm-debug.log*
+
+# Android and Gradle generated files
+android/.gradle/
+android/local.properties
+android/**/build/
+android/**/.cxx/
+android/**/.externalNativeBuild/
+
+# Android Studio and IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Signing keys and private build configuration
 *.jks
 *.keystore
 *.p12
+*.pfx
 key.properties
 android/key.properties
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+.vscode/

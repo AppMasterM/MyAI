@@ -4,6 +4,9 @@
   "private": true,
   "description": "MyAI React frontend",
   "dependencies": {
+    "@capacitor/android": "^7.6.8",
+    "@capacitor/cli": "^7.6.8",
+    "@capacitor/core": "^7.6.8",
     "ajv": "^8.20.0",
     "ajv-keywords": "^5.1.0",
     "jszip": "^3.10.1",

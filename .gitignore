@@ -5,3 +5,8 @@ build/
 !.env.example
 npm-debug.log*
 .DS_Store
+*.jks
+*.keystore
+*.p12
+key.properties
+android/key.properties

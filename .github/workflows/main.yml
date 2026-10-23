@@ -1,4 +1,4 @@
-name: MyAI Build
+name: MyAI Android Build
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   build:
-    name: Build React application
+    name: Build MyAI
     runs-on: ubuntu-latest
 
     steps:
@@ -33,10 +33,77 @@ jobs:
       - name: Build production website
         run: npm run build
 
-      - name: Upload production build
+      - name: Upload production website
         uses: actions/upload-artifact@v4
         with:
           name: MyAI-web-build
           path: build/
           if-no-files-found: error
           retention-days: 14
+
+      - name: Set up Java
+        if: github.event_name != 'pull_request'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Sync Capacitor Android project
+        if: github.event_name != 'pull_request'
+        run: npx cap sync android
+
+      - name: Prepare release keystore
+        if: github.event_name != 'pull_request'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "Missing GitHub Actions secret: KEYSTORE_BASE64"
+            exit 1
+          fi
+
+          mkdir -p "$RUNNER_TEMP/myai-signing"
+          printf '%s' "$KEYSTORE_BASE64" \
+            | base64 --decode \
+            > "$RUNNER_TEMP/myai-signing/release.p12"
+
+          test -s "$RUNNER_TEMP/myai-signing/release.p12"
+          echo "Keystore file prepared."
+
+      - name: Build signed release APK
+        if: github.event_name != 'pull_request'
+        working-directory: android
+        env:
+          MYAI_KEYSTORE_PATH: ${{ runner.temp }}/myai-signing/release.p12
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          test -n "$KEYSTORE_PASSWORD" || {
+            echo "Missing GitHub Actions secret: KEYSTORE_PASSWORD"
+            exit 1
+          }
+          test -n "$KEY_ALIAS" || {
+            echo "Missing GitHub Actions secret: KEY_ALIAS"
+            exit 1
+          }
+          test -n "$KEY_PASSWORD" || {
+            echo "Missing GitHub Actions secret: KEY_PASSWORD"
+            exit 1
+          }
+
+          chmod +x ./gradlew
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Upload signed release APK
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyAI-signed-release-apk
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 30

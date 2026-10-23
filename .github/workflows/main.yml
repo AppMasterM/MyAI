@@ -63,7 +63,6 @@ jobs:
           done
 
           KEYSTORE_PATH="$RUNNER_TEMP/myai-release.p12"
-
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
           chmod 600 "$KEYSTORE_PATH"
 
@@ -106,11 +105,7 @@ jobs:
           set -euo pipefail
 
           APK="android/app/build/outputs/apk/release/app-release.apk"
-
-          if [ ! -s "$APK" ]; then
-            echo "ERROR: Release APK was not generated."
-            exit 1
-          fi
+          test -s "$APK"
 
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" \
             -type f -name apksigner | sort -V | tail -n 1)"
